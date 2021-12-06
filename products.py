@@ -7,13 +7,16 @@ import os
 JSON_FILES = 286 # files start with 0
 JSON_PATH = "./data_input/listings/{i:04}.json"
 LIKES = 500
+BAN_WORDS= "./.ban_strings"
 SAVE_PATH_TOP_ITEMS = "./data_intermediate/top_items.pkl"
 SAVE_PATH_FINAL_ITEMS = "./data_final/top_items.json"
 KEEP_ITEMS = 3000
 
+
 def get_top_items():
     """Returns items with 500 or more likes."""
     top_items = pd.DataFrame()
+    ban_list = load_ban_list()
     for i in range(JSON_FILES):
         df = pd.read_json(JSON_PATH.format(i=i))
         df = df[df.num_favorers >= LIKES]
@@ -27,6 +30,31 @@ def save_top_items(df):
     df.to_pickle(SAVE_PATH_TOP_ITEMS)
 
 
+def load_ban_list():
+    try:
+        list = []
+        with open(BAN_WORDS) as file:
+            for line in file:
+                list.append(line.strip())
+        return list
+    except e:
+        print(e)
+        print("Ban list {fp} not found".format(fp=BAN_WORDS))
+        return []
+
+
+def remove_inappropriate(df):
+    """Removes item if description contains a ban word."""
+    ban_list = load_ban_list()
+    def filter(string):
+        for bad_word in ban_list:
+            if bad_word in string.lower():
+                return False
+        return True
+    keep = df.apply(lambda x: filter(x.description + x.title), axis=1)
+    return df.loc[keep, :]
+
+
 def extract_fields(df):
     """Extracts relevant data from record."""
     df["images"] = df["Images"].apply(get_image_links)
@@ -35,9 +63,10 @@ def extract_fields(df):
     df["handmade"] = df["who_made"].apply(lambda x: x == "i_did")
     keep = [
         "title", "description", "price", "category_path_ids", "category_id",
-        "materials", "images", "handmade"
+        "materials", "images", "handmade", "num_favorers"
     ]
     return df.loc[:, keep]
+
 
 def get_image_links(images):
     """Get image links from image data."""
@@ -53,10 +82,14 @@ def main():
     else:
         print("Getting items with 500+ likes from each json file.")
         top_items = get_top_items()
-        print("Saving to {fp}".format(fp=SAVE_PATH_TOP_ITEMS))
         save_top_items(top_items)
-    relevant_data = extract_fields(top_items)
-    relevant_data.sample(n=KEEP_ITEMS).to_json(SAVE_PATH_FINAL_ITEMS, orient="records")
+        print("Saved to {fp}".format(fp=SAVE_PATH_TOP_ITEMS))
+    top_items = remove_inappropriate(top_items)
+    top_items = extract_fields(top_items)
+    top_items.sample(n=KEEP_ITEMS).to_json(SAVE_PATH_FINAL_ITEMS, orient="records")
+    print("Saved sample of {n} items to {fp}".format(
+        fp=SAVE_PATH_FINAL_ITEMS, n=KEEP_ITEMS
+    ))
 
 
 if __name__ == "__main__":
