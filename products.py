@@ -4,12 +4,15 @@ import sys
 import os
 
 
+JSON_FILES = 286 # files start with 0
+JSON_PATH = "./data_input/listings/{i:04}.json"
+LIKES = 500
+SAVE_PATH_TOP_ITEMS = "./data_intermediate/top_items.pkl"
+SAVE_PATH_FINAL_ITEMS = "./data_final/top_items.json"
+KEEP_ITEMS = 3000
+
 def get_top_items():
     """Returns items with 500 or more likes."""
-    JSON_FILES = 286 # files start with 0
-    JSON_PATH = "./data_input/listings/{i:04}.json"
-    LIKES = 500
-
     top_items = pd.DataFrame()
     for i in range(JSON_FILES):
         df = pd.read_json(JSON_PATH.format(i=i))
@@ -19,13 +22,12 @@ def get_top_items():
     return top_items
 
 
-SAVE_PATH_TOP_ITEMS = "./data_intermediate/top_items.pkl"
 def save_top_items(df):
-    """Saves top items df."""
+    """Saves unfiltered top items df."""
     df.to_pickle(SAVE_PATH_TOP_ITEMS)
 
 
-def extract_data(df):
+def extract_fields(df):
     """Extracts relevant data from record."""
     df["images"] = df["Images"].apply(get_image_links)
     df["category_path_ids"] = df["category_path_ids"].apply(lambda x: x[0:3])
@@ -42,6 +44,7 @@ def get_image_links(images):
     img_keys = ["url_75x75", "url_170x135", "url_570xN", "url_fullxfull"]
     return [dict([(k, v) for (k, v) in img.items() if k in img_keys]) for img in images]
 
+
 def main():
     """Prepares seeder data from Etsy dataset."""
     if os.path.exists(SAVE_PATH_TOP_ITEMS):
@@ -52,7 +55,9 @@ def main():
         top_items = get_top_items()
         print("Saving to {fp}".format(fp=SAVE_PATH_TOP_ITEMS))
         save_top_items(top_items)
-    relevant_data = extract_data(top_items)
+    relevant_data = extract_fields(top_items)
+    relevant_data.sample(n=KEEP_ITEMS).to_json(SAVE_PATH_FINAL_ITEMS, orient="records")
+
 
 if __name__ == "__main__":
     main()
